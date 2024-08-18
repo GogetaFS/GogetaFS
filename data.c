@@ -6,7 +6,7 @@
  *             http://www.samsung.com/
  */
 #include <linux/fs.h>
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include <linux/buffer_head.h>
 #include <linux/mpage.h>
 #include <linux/writeback.h>
@@ -24,6 +24,7 @@
 #include "node.h"
 #include "segment.h"
 #include "trace.h"
+#include "fingerprint.h"
 #include <trace/events/f2fs.h>
 
 #define NUM_PREALLOC_POST_READ_CTXS	128
@@ -737,7 +738,7 @@ static int f2fs_submit_page_read(struct inode *inode, struct page *page,
 static void __set_data_blkaddr(struct dnode_of_data *dn)
 {
 	struct f2fs_node *rn = F2FS_NODE(dn->node_page);
-	__le32 *addr_array;
+	struct f2fs_entry *addr_array;
 	int base = 0;
 
 	if (IS_INODE(dn->node_page) && f2fs_has_extra_attr(dn->inode))
@@ -745,7 +746,8 @@ static void __set_data_blkaddr(struct dnode_of_data *dn)
 
 	/* Get physical address of data block */
 	addr_array = blkaddr_in_node(rn);
-	addr_array[base + dn->ofs_in_node] = cpu_to_le32(dn->data_blkaddr);
+	addr_array[base + dn->ofs_in_node].blocknr = cpu_to_le32(dn->data_blkaddr);
+	addr_array[base + dn->ofs_in_node].fp = dn->fp;
 }
 
 /*
@@ -764,6 +766,7 @@ void f2fs_set_data_blkaddr(struct dnode_of_data *dn)
 
 void f2fs_update_data_blkaddr(struct dnode_of_data *dn, block_t blkaddr)
 {
+	// TODO: insert fp here
 	dn->data_blkaddr = blkaddr;
 	f2fs_set_data_blkaddr(dn);
 	f2fs_update_extent_cache(dn);
@@ -2119,6 +2122,7 @@ static int __write_data_page(struct page *page, bool *submitted,
 		.io_wbc = wbc,
 		.bio = bio,
 		.last_block = last_block,
+		.duplicated = false,
 	};
 
 	trace_f2fs_writepage(page, DATA);

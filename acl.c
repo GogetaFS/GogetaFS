@@ -9,7 +9,7 @@
  *
  * Copyright (C) 2001-2003 Andreas Gruenbacher, <agruen@suse.de>
  */
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include "f2fs.h"
 #include "xattr.h"
 #include "acl.h"

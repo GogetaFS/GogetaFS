@@ -6,7 +6,7 @@
  *             http://www.samsung.com/
  */
 #include <linux/fs.h>
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include <linux/buffer_head.h>
 #include <linux/backing-dev.h>
 #include <linux/writeback.h>
@@ -61,19 +61,19 @@ static void __get_inode_rdev(struct inode *inode, struct f2fs_inode *ri)
 
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode) ||
 			S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
-		if (ri->i_addr[extra_size])
+		if (ri->i_addr[extra_size].blocknr)
 			inode->i_rdev = old_decode_dev(
-				le32_to_cpu(ri->i_addr[extra_size]));
+				le32_to_cpu(ri->i_addr[extra_size].blocknr));
 		else
 			inode->i_rdev = new_decode_dev(
-				le32_to_cpu(ri->i_addr[extra_size + 1]));
+				le32_to_cpu(ri->i_addr[extra_size + 1].blocknr));
 	}
 }
 
 static int __written_first_block(struct f2fs_sb_info *sbi,
 					struct f2fs_inode *ri)
 {
-	block_t addr = le32_to_cpu(ri->i_addr[offset_in_addr(ri)]);
+	block_t addr = le32_to_cpu(ri->i_addr[offset_in_addr(ri)].blocknr);
 
 	if (!__is_valid_data_blkaddr(addr))
 		return 1;
@@ -88,14 +88,14 @@ static void __set_inode_rdev(struct inode *inode, struct f2fs_inode *ri)
 
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode)) {
 		if (old_valid_dev(inode->i_rdev)) {
-			ri->i_addr[extra_size] =
+			ri->i_addr[extra_size].blocknr =
 				cpu_to_le32(old_encode_dev(inode->i_rdev));
-			ri->i_addr[extra_size + 1] = 0;
+			ri->i_addr[extra_size + 1].blocknr = 0;
 		} else {
-			ri->i_addr[extra_size] = 0;
-			ri->i_addr[extra_size + 1] =
+			ri->i_addr[extra_size].blocknr = 0;
+			ri->i_addr[extra_size + 1].blocknr =
 				cpu_to_le32(new_encode_dev(inode->i_rdev));
-			ri->i_addr[extra_size + 2] = 0;
+			ri->i_addr[extra_size + 2].blocknr = 0;
 		}
 	}
 }

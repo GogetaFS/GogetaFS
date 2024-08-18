@@ -20,7 +20,7 @@
 #include <linux/exportfs.h>
 #include <linux/blkdev.h>
 #include <linux/quotaops.h>
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include <linux/sysfs.h>
 #include <linux/quota.h>
 #include <linux/unicode.h>
@@ -31,6 +31,7 @@
 #include "xattr.h"
 #include "gc.h"
 #include "trace.h"
+#include "gogeta.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/f2fs.h>
@@ -1185,6 +1186,8 @@ static void f2fs_put_super(struct super_block *sb)
 	if (sbi->s_chksum_driver)
 		crypto_free_shash(sbi->s_chksum_driver);
 	kvfree(sbi->raw_super);
+
+	gogeta_meta_free(&sbi->gogeta_meta);
 
 	destroy_device_list(sbi);
 	mempool_destroy(sbi->write_io_dummy);
@@ -3464,6 +3467,8 @@ try_onemore:
 		spin_lock_init(&sbi->inode_lock[i]);
 	}
 	mutex_init(&sbi->flush_lock);
+
+	gogeta_meta_init(&sbi->gogeta_meta, sb);
 
 	f2fs_init_extent_cache_info(sbi);
 

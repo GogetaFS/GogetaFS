@@ -8,7 +8,7 @@
  */
 #include <linux/compiler.h>
 #include <linux/proc_fs.h>
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include <linux/seq_file.h>
 #include <linux/unicode.h>
 

@@ -6,7 +6,7 @@
  *             http://www.samsung.com/
  */
 #include <linux/fs.h>
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include <linux/pagemap.h>
 #include <linux/sched.h>
 #include <linux/ctype.h>

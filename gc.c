@@ -9,7 +9,7 @@
 #include <linux/module.h>
 #include <linux/backing-dev.h>
 #include <linux/init.h>
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/freezer.h>

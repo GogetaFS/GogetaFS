@@ -23,9 +23,14 @@
 #include <linux/blkdev.h>
 #include <linux/quotaops.h>
 #include <crypto/hash.h>
+#include "f2fs_fs.h"
 
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
+
+#include "fingerprint.h"
+#include "xatable.h"
+#include "gogeta.h"
 
 #ifdef CONFIG_F2FS_CHECK_FS
 #define f2fs_bug_on(sbi, condition)	BUG_ON(condition)
@@ -865,6 +870,7 @@ struct dnode_of_data {
 	char cur_level;			/* level of hole node page */
 	char max_level;			/* level of current page located */
 	block_t	data_blkaddr;		/* block address of the node block */
+	struct gogeta_fp fp;	/* fingerprint of data_blkaddr */
 };
 
 static inline void set_new_dnode(struct dnode_of_data *dn, struct inode *inode,
@@ -1079,6 +1085,8 @@ struct f2fs_io_info {
 	struct bio **bio;		/* bio for ipu */
 	sector_t *last_block;		/* last block number in bio */
 	unsigned char version;		/* version of the node */
+
+	bool duplicated;	/* indicate the page is duplicated */
 };
 
 #define is_read_io(rw) ((rw) == READ)
@@ -1180,6 +1188,20 @@ enum fsync_mode {
 #else
 #define DUMMY_ENCRYPTION_ENABLED(sbi) (0)
 #endif
+
+struct gogeta_meta {
+    struct super_block *sb;
+    int cpus;
+	// FP to PBN
+	struct rhashtable rht;
+	struct kmem_cache *rht_entry_cache;
+	// PBN to FP
+	struct xarray revmap;			// runtime to hold rev entries
+	struct kmem_cache *revmap_entry_cache;
+	struct xatable map_blocknr_to_pentry; // for accelerating mount time to hold rev entries
+
+	atomic64_t thread_num;
+};
 
 struct f2fs_sb_info {
 	struct super_block *sb;			/* pointer to VFS super block */
@@ -1366,6 +1388,9 @@ struct f2fs_sb_info {
 
 	/* Reference to checksum algorithm driver via cryptoapi */
 	struct crypto_shash *s_chksum_driver;
+
+	/* For deduplication support */
+	struct gogeta_meta gogeta_meta;
 
 	/* Precomputed FS UUID checksum for seeding other checksums */
 	__u32 s_chksum_seed;
@@ -2304,10 +2329,10 @@ static inline bool IS_INODE(struct page *page)
 static inline int offset_in_addr(struct f2fs_inode *i)
 {
 	return (i->i_inline & F2FS_EXTRA_ATTR) ?
-			(le16_to_cpu(i->i_extra_isize) / sizeof(__le32)) : 0;
+			(le16_to_cpu(i->i_extra_isize) / sizeof(struct f2fs_entry)) : 0;
 }
 
-static inline __le32 *blkaddr_in_node(struct f2fs_node *node)
+static inline struct f2fs_entry *blkaddr_in_node(struct f2fs_node *node)
 {
 	return RAW_IS_INODE(node) ? node->i.i_addr : node->dn.addr;
 }
@@ -2317,7 +2342,7 @@ static inline block_t datablock_addr(struct inode *inode,
 			struct page *node_page, unsigned int offset)
 {
 	struct f2fs_node *raw_node;
-	__le32 *addr_array;
+	struct f2fs_entry *addr_array;
 	int base = 0;
 	bool is_inode = IS_INODE(node_page);
 
@@ -2332,7 +2357,7 @@ static inline block_t datablock_addr(struct inode *inode,
 	}
 
 	addr_array = blkaddr_in_node(raw_node);
-	return le32_to_cpu(addr_array[base + offset]);
+	return le32_to_cpu(addr_array[base + offset].blocknr);
 }
 
 static inline int f2fs_test_bit(unsigned int nr, char *addr)
@@ -2852,7 +2877,7 @@ static inline void *f2fs_kvzalloc(struct f2fs_sb_info *sbi,
 
 static inline int get_extra_isize(struct inode *inode)
 {
-	return F2FS_I(inode)->i_extra_isize / sizeof(__le32);
+	return F2FS_I(inode)->i_extra_isize / sizeof(struct f2fs_entry);
 }
 
 static inline int get_inline_xattr_addrs(struct inode *inode)
@@ -3260,6 +3285,15 @@ int f2fs_migrate_page(struct address_space *mapping, struct page *newpage,
 #endif
 bool f2fs_overwrite_io(struct inode *inode, loff_t pos, size_t len);
 void f2fs_clear_page_cache_dirty_tag(struct page *page);
+
+/*
+ * gogeta.c
+ */
+
+int gogeta_meta_init(struct gogeta_meta *meta, struct super_block *sb);
+void gogeta_meta_free(struct gogeta_meta *meta);
+
+int gogeta_identify_one_page(struct dnode_of_data *dn, struct f2fs_io_info *fio);
 
 /*
  * gc.c

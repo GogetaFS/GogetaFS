@@ -6,7 +6,7 @@
  *             http://www.samsung.com/
  */
 #include <linux/fs.h>
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include <linux/stat.h>
 #include <linux/buffer_head.h>
 #include <linux/writeback.h>
@@ -517,7 +517,7 @@ void f2fs_truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dn->inode);
 	struct f2fs_node *raw_node;
 	int nr_free = 0, ofs = dn->ofs_in_node, len = count;
-	__le32 *addr;
+	struct f2fs_entry *addr;
 	int base = 0;
 
 	if (IS_INODE(dn->node_page) && f2fs_has_extra_attr(dn->inode))
@@ -527,7 +527,7 @@ void f2fs_truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 	addr = blkaddr_in_node(raw_node) + base + ofs;
 
 	for (; count > 0; count--, addr++, dn->ofs_in_node++) {
-		block_t blkaddr = le32_to_cpu(*addr);
+		block_t blkaddr = le32_to_cpu(addr->blocknr);
 
 		if (blkaddr == NULL_ADDR)
 			continue;

@@ -16,7 +16,7 @@
  *  Red Hat Inc.
  */
 #include <linux/rwsem.h>
-#include <linux/f2fs_fs.h>
+#include "f2fs_fs.h"
 #include <linux/security.h>
 #include <linux/posix_acl_xattr.h>
 #include "f2fs.h"

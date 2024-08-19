@@ -4,3 +4,4 @@
 !Makefile
 !.gitignore
 !setup.sh
+f2fs.mod.c

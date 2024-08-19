@@ -201,6 +201,8 @@ void gogeta_init_entry(struct gogeta_rht_entry *pentry, struct gogeta_fp fp, uns
 {
     pentry->fp = fp;
     pentry->blocknr = cpu_to_le64(blocknr);
+    atomic64_set(&pentry->next_hint,
+                 cpu_to_le64(HINT_TRUST_DEGREE_THRESHOLD));
 }
 
 extern void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio);
@@ -347,7 +349,7 @@ retry:
         __gogeta_alloc_and_write(dn, fio);
         fio->last_accessed = NULL;
     }
-    
+
     rcu_read_unlock();
     return 0;
 }
@@ -501,6 +503,8 @@ static void handle_hint_of_hint(struct dnode_of_data *dn, struct f2fs_io_info *f
         return;
     if (atomic64_read(&pentry->refcount) == 0)
         return;
+
+    blocknr = pentry->blocknr;
     BUG_ON(blocknr == 0);
     fio->block_prefetching = pentry->blocknr;
     fio->prefetched_blocknr[1] = fio->prefetched_blocknr[0];
@@ -533,7 +537,6 @@ static int check_hint(struct dnode_of_data *dn, struct f2fs_io_info *fio, struct
     // because we are holding the RCU read lock.
 
     handle_hint_of_hint(dn, fio, &speculative_pentry->next_hint);
-    sb_breadahead(sb, speculative_blocknr);
 
     // Increase refcount speculatively
     ret = atomic64_add_unless(&speculative_pentry->refcount, 1, 0);

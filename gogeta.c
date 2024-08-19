@@ -172,13 +172,24 @@ void gogeta_init_entry(struct gogeta_rht_entry *pentry, struct gogeta_fp fp, uns
 
 extern void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio);
 
+static void gogeta_alloc_and_write(struct dnode_of_data *dn, struct f2fs_io_info *fio)
+{
+    struct f2fs_summary sum;
+    struct page *page = fio->page;
+
+    set_page_writeback(page);
+    ClearPageError(page);
+
+    set_summary(&sum, dn->nid, dn->ofs_in_node, fio->version);
+    do_write_page(&sum, fio);
+}
+
 int gogeta_handle_new_block(struct dnode_of_data *dn, struct f2fs_io_info *fio, struct gogeta_fp fp)
 {
     struct gogeta_meta *meta = &fio->sbi->gogeta_meta;
     struct super_block *sb = meta->sb;
     struct gogeta_rht_entry *rht_entry;
     struct gogeta_revmap_entry *rev_entry;
-    struct f2fs_summary sum;
     int cpu, idx;
     int64_t refcount;
     unsigned long blocknr;
@@ -196,8 +207,7 @@ int gogeta_handle_new_block(struct dnode_of_data *dn, struct f2fs_io_info *fio, 
         goto fail1;
     }
 
-    set_summary(&sum, dn->nid, dn->ofs_in_node, fio->version);
-    do_write_page(&sum, fio);
+    gogeta_alloc_and_write(dn, fio);
 
     blocknr = fio->new_blkaddr;
 
@@ -284,10 +294,12 @@ retry:
     }
     kaddr = kmap_atomic(fio->page);
     if (!memcmp(bh->b_data, kaddr, sb->s_blocksize)) {
+        // f2fs_debug(sbi, "%s: duplicated\n", __func__);
         // the same
         fio->new_blkaddr = blocknr;
         fio->duplicated = true;
     } else {
+        // f2fs_debug(sbi, "%s: collision\n", __func__);
         // different
         fio->duplicated = false;
     }
@@ -297,6 +309,8 @@ retry:
     // refcount
     if (fio->duplicated) {
         atomic64_fetch_add_unless(&rht_entry->refcount, 1, 0);
+    } else {
+        gogeta_alloc_and_write(dn, fio);
     }
 
     rcu_read_unlock();

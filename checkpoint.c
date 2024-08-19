@@ -1214,6 +1214,7 @@ retry_flush_quotas:
 	}
 
 retry_flush_dents:
+	f2fs_info(sbi, "flushing all dentry pages");
 	/* write all the dirty dentry pages */
 	if (get_pages(sbi, F2FS_DIRTY_DENTS)) {
 		f2fs_unlock_all(sbi);
@@ -1229,7 +1230,7 @@ retry_flush_dents:
 	 * until finishing nat/sit flush. inode->i_blocks can be updated.
 	 */
 	down_write(&sbi->node_change);
-
+	f2fs_info(sbi, "flushing all inode meta pages");
 	if (get_pages(sbi, F2FS_DIRTY_IMETA)) {
 		up_write(&sbi->node_change);
 		f2fs_unlock_all(sbi);
@@ -1242,7 +1243,7 @@ retry_flush_dents:
 
 retry_flush_nodes:
 	down_write(&sbi->node_write);
-
+	f2fs_info(sbi, "flushing all node pages");
 	if (get_pages(sbi, F2FS_DIRTY_NODES)) {
 		up_write(&sbi->node_write);
 		atomic_inc(&sbi->wb_sync_req[NODE]);
@@ -1599,10 +1600,14 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	}
 
 	trace_f2fs_write_checkpoint(sbi->sb, cpc->reason, "start block_ops");
+	
+	f2fs_info(sbi, "%s: start block", __func__);
 
 	err = block_operations(sbi);
 	if (err)
 		goto out;
+
+	f2fs_info(sbi, "%s: done block", __func__);
 
 	trace_f2fs_write_checkpoint(sbi->sb, cpc->reason, "finish block_ops");
 

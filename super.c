@@ -1115,6 +1115,10 @@ static void f2fs_put_super(struct super_block *sb)
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	int i;
 	bool dropped;
+	
+	f2fs_info(sbi, "Unmounting file system");
+	
+	gogeta_meta_free(&sbi->gogeta_meta);
 
 	/* unregister procfs/sysfs entries in advance to avoid race case */
 	f2fs_unregister_sysfs(sbi);
@@ -1187,8 +1191,6 @@ static void f2fs_put_super(struct super_block *sb)
 		crypto_free_shash(sbi->s_chksum_driver);
 	kvfree(sbi->raw_super);
 
-	gogeta_meta_free(&sbi->gogeta_meta);
-
 	destroy_device_list(sbi);
 	mempool_destroy(sbi->write_io_dummy);
 #ifdef CONFIG_QUOTA
@@ -1208,6 +1210,8 @@ int f2fs_sync_fs(struct super_block *sb, int sync)
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	int err = 0;
+
+	f2fs_info(sbi, "Syncing filesystem");
 
 	if (unlikely(f2fs_cp_error(sbi)))
 		return 0;

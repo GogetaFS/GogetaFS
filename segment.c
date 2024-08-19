@@ -3243,10 +3243,22 @@ void f2fs_outplace_write_data(struct dnode_of_data *dn,
 					struct f2fs_io_info *fio)
 {
 	struct f2fs_sb_info *sbi = fio->sbi;
+	struct f2fs_summary sum;
+	struct inode *inode = dn->inode;
+	struct page *page = fio->page;
 
 	f2fs_bug_on(sbi, dn->data_blkaddr == NULL_ADDR);
 	
-	gogeta_identify_one_page(dn, fio);
+	if (S_ISREG(inode->i_mode)) {
+		// only deduplication for regular file
+		gogeta_identify_one_page(dn, fio);
+	} else {
+		set_page_writeback(page);
+		ClearPageError(page);
+		
+		set_summary(&sum, dn->nid, dn->ofs_in_node, fio->version);
+		do_write_page(&sum, fio);
+	}
 	f2fs_update_data_blkaddr(dn, fio->new_blkaddr);
 
 	f2fs_update_iostat(sbi, fio->io_type, F2FS_BLKSIZE);

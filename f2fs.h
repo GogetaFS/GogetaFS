@@ -1087,6 +1087,10 @@ struct f2fs_io_info {
 	unsigned char version;		/* version of the node */
 
 	bool duplicated;	/* indicate the page is duplicated */
+	struct gogeta_rht_entry *last_accessed;	/* last accessed rht entry */
+	u8 stream_trust_degree;
+	u32 block_prefetching;
+	unsigned long prefetched_blocknr[2];
 };
 
 #define is_read_io(rw) ((rw) == READ)
@@ -3293,7 +3297,8 @@ void f2fs_clear_page_cache_dirty_tag(struct page *page);
 int gogeta_meta_init(struct gogeta_meta *meta, struct super_block *sb);
 void gogeta_meta_free(struct gogeta_meta *meta);
 
-int gogeta_identify_one_page(struct dnode_of_data *dn, struct f2fs_io_info *fio);
+int gogeta_dedup_one_page(struct dnode_of_data *dn, struct f2fs_io_info *fio);
+int gogeta_dedup_one_page_acc(struct dnode_of_data *dn, struct f2fs_io_info *fio);
 
 /*
  * gc.c

@@ -340,6 +340,7 @@ __used __section(__versions) = {
 	{ 0xb8b9f817, "kmalloc_order_trace" },
 	{ 0x96b29254, "strncasecmp" },
 	{ 0x3f3b986a, "make_kprojid" },
+	{ 0xd815d093, "__breadahead" },
 	{ 0x1953c958, "mempool_create" },
 	{ 0x605790dc, "fiemap_fill_next_extent" },
 	{ 0xb2a26c66, "unlock_new_inode" },
@@ -491,4 +492,4 @@ __used __section(__versions) = {
 MODULE_INFO(depends, "");
 
 
-MODULE_INFO(srcversion, "9DB0F6B2A917B1E77B6BF4C");
+MODULE_INFO(srcversion, "498982B90442DDD10ECA343");

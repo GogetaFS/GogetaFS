@@ -3251,7 +3251,7 @@ void f2fs_outplace_write_data(struct dnode_of_data *dn,
 	
 	if (S_ISREG(inode->i_mode)) {
 		// only deduplication for regular file
-		gogeta_identify_one_page(dn, fio);
+		gogeta_dedup_one_page_acc(dn, fio);
 	} else {
 		set_page_writeback(page);
 		ClearPageError(page);

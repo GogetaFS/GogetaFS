@@ -633,11 +633,7 @@ int gogeta_dedup_one_page_acc(struct dnode_of_data *dn, struct f2fs_io_info *fio
     fio->block_prefetching = 0;
     fio->prefetched_blocknr[0] = fio->prefetched_blocknr[1] = 0;
 
-    if (fio->last_accessed) {
-        handle_hint(dn, fio, &fio->last_accessed->next_hint);
-    } else {
-        gogeta_dedup_one_page(dn, fio);
-    }
+    gogeta_dedup_one_page(dn, fio);
 
     cpu = get_cpu();
     per_cpu(last_accessed_fpentry_per_cpu, cpu) = fio->last_accessed;

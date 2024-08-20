@@ -217,6 +217,9 @@ static void __gogeta_alloc_and_write(struct dnode_of_data *dn, struct f2fs_io_in
 
     set_summary(&sum, dn->nid, dn->ofs_in_node, fio->version);
     do_write_page(&sum, fio);
+
+    // do not drop page too early
+    sb_breadahead(fio->sbi->sb, fio->new_blkaddr);
 }
 
 static int __gogeta_handle_new_block(struct dnode_of_data *dn, struct f2fs_io_info *fio, struct gogeta_fp fp)

@@ -1205,6 +1205,7 @@ struct gogeta_meta {
 	struct xatable map_blocknr_to_pentry; // for accelerating mount time to hold rev entries
 
 	atomic64_t thread_num;
+	struct file *fp_store;
 };
 
 struct f2fs_sb_info {

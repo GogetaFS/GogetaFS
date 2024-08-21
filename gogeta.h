@@ -8,6 +8,7 @@ struct gogeta_rht_entry {
 	struct rhash_head node;
 	struct gogeta_fp fp;
 	__le64 blocknr;
+	unsigned long f_ofs;
 	atomic64_t refcount;
     // TODO: prefetch
 	// Lowest 3 bits are unsigned trust degree (<= 7). Initially 4.

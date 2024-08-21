@@ -3472,8 +3472,6 @@ try_onemore:
 	}
 	mutex_init(&sbi->flush_lock);
 
-	gogeta_meta_init(&sbi->gogeta_meta, sb);
-
 	f2fs_init_extent_cache_info(sbi);
 
 	f2fs_init_ino_entry_info(sbi);
@@ -3547,7 +3545,9 @@ try_onemore:
 	err = f2fs_register_sysfs(sbi);
 	if (err)
 		goto free_root_inode;
-
+	
+	gogeta_meta_init(&sbi->gogeta_meta, sb);
+	
 #ifdef CONFIG_QUOTA
 	/* Enable quota usage during mount */
 	if (f2fs_sb_has_quota_ino(sbi) && !f2fs_readonly(sb)) {

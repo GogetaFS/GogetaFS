@@ -208,7 +208,6 @@ struct f2fs_extent {
 struct f2fs_entry {
 	/* can be one of three types: inode, direct, and indirect types */
 	__le32 blocknr;
-	struct gogeta_fp fp;
 } __packed;
 
 #define F2FS_NAME_LEN		255

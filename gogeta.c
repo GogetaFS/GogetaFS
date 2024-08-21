@@ -156,8 +156,16 @@ int gogeta_meta_alloc(struct gogeta_meta *meta,
     if (ret < 0)
         goto err_out4;
 
+    meta->fp_store = filp_open("/mnt/nvme0n1/smartmeta", O_CREAT | O_RDWR, 0644);
+    if (IS_ERR(meta->fp_store)) {
+        ret = PTR_ERR(meta->fp_store);
+        goto err_out5;
+    }
+
     return 0;
 
+err_out5:
+    xatable_destroy(&meta->map_blocknr_to_pentry);
 err_out4:
     kmem_cache_destroy(meta->revmap_entry_cache);
 err_out3:
@@ -195,14 +203,17 @@ void gogeta_meta_free(struct gogeta_meta *meta)
 
     xa_destroy(&meta->revmap);
     xatable_destroy(&meta->map_blocknr_to_pentry);
+
+    filp_close(meta->fp_store, NULL);
 }
 
-void gogeta_init_entry(struct gogeta_rht_entry *pentry, struct gogeta_fp fp, unsigned long blocknr)
+void gogeta_init_entry(struct gogeta_rht_entry *pentry, struct gogeta_fp fp, unsigned long blocknr, unsigned long f_ofs)
 {
     pentry->fp = fp;
     pentry->blocknr = cpu_to_le64(blocknr);
     atomic64_set(&pentry->next_hint,
                  cpu_to_le64(HINT_TRUST_DEGREE_THRESHOLD));
+    pentry->f_ofs = f_ofs;
 }
 
 extern void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio);
@@ -222,7 +233,60 @@ static void __gogeta_alloc_and_write(struct dnode_of_data *dn, struct f2fs_io_in
     sb_breadahead(fio->sbi->sb, fio->new_blkaddr);
 }
 
-static int __gogeta_handle_new_block(struct dnode_of_data *dn, struct f2fs_io_info *fio, struct gogeta_fp fp)
+static int new_fp2p(struct gogeta_meta *meta, struct gogeta_rht_entry *rht_entry)
+{
+    char buf[sizeof(struct fp_entry)];
+    struct fp_entry *fp_entry;
+    ssize_t ret = 0;
+    loff_t pos = rht_entry->f_ofs;
+
+    fp_entry = (struct fp_entry *)buf;
+    fp_entry->fp = rht_entry->fp;
+    fp_entry->blocknr = rht_entry->blocknr;
+    fp_entry->refcount = 1;
+
+    ret = kernel_write(meta->fp_store, buf, sizeof(struct fp_entry), &pos);
+    if (ret < 0) {
+        BUG_ON(1);
+        return ret;
+    }
+
+    // sync file
+    generic_file_fsync(meta->fp_store, rht_entry->f_ofs, rht_entry->f_ofs + sizeof(struct fp_entry), false);
+
+    return 0;
+}
+
+static int incr_fp2p(struct gogeta_meta *meta, struct gogeta_rht_entry *rht_entry)
+{
+    char buf[sizeof(struct fp_entry)];
+    struct fp_entry *fp_entry;
+    ssize_t ret = 0;
+    loff_t pos = rht_entry->f_ofs;
+
+    // !FIXME: we assume all cached
+    // ret = kernel_read(meta->fp_store, buf, sizeof(struct fp_entry), &pos);
+    // if (ret < 0) {
+    //     BUG_ON(1);
+    //     return ret;
+    // }
+
+    fp_entry = (struct fp_entry *)buf;
+    fp_entry->refcount += 1;
+
+    ret = kernel_write(meta->fp_store, buf, sizeof(struct fp_entry), &pos);
+    if (ret < 0) {
+        BUG_ON(1);
+        return ret;
+    }
+
+    // sync file
+    generic_file_fsync(meta->fp_store, rht_entry->f_ofs, rht_entry->f_ofs + sizeof(struct fp_entry), false);
+
+    return 0;
+}
+
+static int __gogeta_handle_new_block(struct dnode_of_data *dn, struct f2fs_io_info *fio, struct gogeta_fp fp, unsigned long f_ofs)
 {
     struct gogeta_meta *meta = &fio->sbi->gogeta_meta;
     struct super_block *sb = meta->sb;
@@ -249,7 +313,7 @@ static int __gogeta_handle_new_block(struct dnode_of_data *dn, struct f2fs_io_in
 
     blocknr = fio->new_blkaddr;
 
-    gogeta_init_entry(rht_entry, fp, blocknr);
+    gogeta_init_entry(rht_entry, fp, blocknr, f_ofs);
 
     rev_entry->blocknr = blocknr;
     rev_entry->fp = fp;
@@ -266,6 +330,8 @@ static int __gogeta_handle_new_block(struct dnode_of_data *dn, struct f2fs_io_in
         xa_erase(&meta->revmap, rev_entry->blocknr);
         goto fail2;
     }
+
+    new_fp2p(meta, rht_entry);
 
     refcount = atomic64_cmpxchg(&rht_entry->refcount, 0, 1);
     BUG_ON(refcount != 0);
@@ -290,7 +356,7 @@ int gogeta_dedup_one_page(struct dnode_of_data *dn, struct f2fs_io_info *fio)
     gfp_t gfp_flags = GFP_NOFS;
     void *kaddr;
     struct gogeta_fp fp;
-    unsigned long blocknr;
+    unsigned long blocknr, f_ofs;
     struct buffer_head *bh;
     int ret;
 
@@ -301,7 +367,7 @@ int gogeta_dedup_one_page(struct dnode_of_data *dn, struct f2fs_io_info *fio)
     kaddr = kmap_atomic(fio->page);
     if (!kaddr)
         return -ENOMEM;
-    gogeta_fp_calc(kaddr, &fp);
+    gogeta_fp_calc(kaddr, &fp, &f_ofs);
     kunmap_atomic(kaddr);
 
     dn->fp = fp;
@@ -312,7 +378,7 @@ retry:
     if (rht_entry == NULL) {
         rcu_read_unlock();
         fio->duplicated = false;
-        ret = __gogeta_handle_new_block(dn, fio, fp);
+        ret = __gogeta_handle_new_block(dn, fio, fp, f_ofs);
         if (ret == -EEXIST)
             goto retry;
         return 0;
@@ -323,35 +389,11 @@ retry:
     BUG_ON(blocknr == 0);
     BUG_ON(sb->s_blocksize != PAGE_SIZE);
 
-    // content cmp
-    bh = sb_bread(sb, blocknr);
-    if (!bh) {
-        f2fs_err(sbi, "fail to read block %lu\n", blocknr);
-        rcu_read_unlock();
-        return -EIO;
-    }
-    kaddr = kmap_atomic(fio->page);
-    if (!memcmp(bh->b_data, kaddr, sb->s_blocksize)) {
-        // f2fs_debug(sbi, "%s: duplicated\n", __func__);
-        // the same
-        fio->new_blkaddr = blocknr;
-        fio->duplicated = true;
-    } else {
-        // f2fs_debug(sbi, "%s: collision\n", __func__);
-        // different
-        fio->duplicated = false;
-    }
-    kunmap_atomic(kaddr);
-    brelse(bh);
+    fio->new_blkaddr = blocknr;
+    fio->duplicated = true;
 
     // refcount
-    if (fio->duplicated) {
-        atomic64_fetch_add_unless(&rht_entry->refcount, 1, 0);
-        fio->last_accessed = rht_entry;
-    } else {
-        __gogeta_alloc_and_write(dn, fio);
-        fio->last_accessed = NULL;
-    }
+    incr_fp2p(&sbi->gogeta_meta, rht_entry);
 
     rcu_read_unlock();
     return 0;

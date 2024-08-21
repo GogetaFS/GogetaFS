@@ -750,7 +750,6 @@ static void __set_data_blkaddr(struct dnode_of_data *dn)
 	// pr_alert("f2fs: %s: nid: %lu, ino: %lu, addr_array: %llx, ofs_in_node: %lu, target: %lu\n", __func__, dn->nid, dn->inode->i_ino, addr_array, dn->ofs_in_node, dn->data_blkaddr);
 
 	addr_array[base + dn->ofs_in_node].blocknr = cpu_to_le32(dn->data_blkaddr);
-	addr_array[base + dn->ofs_in_node].fp = dn->fp;
 }
 
 /*

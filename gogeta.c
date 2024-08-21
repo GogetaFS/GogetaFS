@@ -156,7 +156,7 @@ int gogeta_meta_alloc(struct gogeta_meta *meta,
     if (ret < 0)
         goto err_out4;
 
-    meta->fp_store = filp_open("/mnt/nvme0n1/smartmeta", O_CREAT | O_RDWR, 0644);
+    meta->fp_store = filp_open("/mnt/nvme0n1/smartmeta", O_CREAT | O_RDWR | O_SYNC, 0644);
     if (IS_ERR(meta->fp_store)) {
         ret = PTR_ERR(meta->fp_store);
         goto err_out5;
@@ -251,9 +251,6 @@ static int new_fp2p(struct gogeta_meta *meta, struct gogeta_rht_entry *rht_entry
         return ret;
     }
 
-    // sync file
-    generic_file_fsync(meta->fp_store, rht_entry->f_ofs, rht_entry->f_ofs + sizeof(struct fp_entry), false);
-
     return 0;
 }
 
@@ -279,9 +276,6 @@ static int incr_fp2p(struct gogeta_meta *meta, struct gogeta_rht_entry *rht_entr
         BUG_ON(1);
         return ret;
     }
-
-    // sync file
-    generic_file_fsync(meta->fp_store, rht_entry->f_ofs, rht_entry->f_ofs + sizeof(struct fp_entry), false);
 
     return 0;
 }
@@ -389,11 +383,36 @@ retry:
     BUG_ON(blocknr == 0);
     BUG_ON(sb->s_blocksize != PAGE_SIZE);
 
-    fio->new_blkaddr = blocknr;
-    fio->duplicated = true;
+    // content cmp
+    bh = sb_bread(sb, blocknr);
+    if (!bh) {
+        f2fs_err(sbi, "fail to read block %lu\n", blocknr);
+        rcu_read_unlock();
+        return -EIO;
+    }
+    kaddr = kmap_atomic(fio->page);
+    if (!memcmp(bh->b_data, kaddr, sb->s_blocksize)) {
+        // f2fs_debug(sbi, "%s: duplicated\n", __func__);
+        // the same
+        fio->new_blkaddr = blocknr;
+        fio->duplicated = true;
+    } else {
+        // f2fs_debug(sbi, "%s: collision\n", __func__);
+        // different
+        fio->duplicated = false;
+    }
+    kunmap_atomic(kaddr);
+    brelse(bh);
 
     // refcount
-    incr_fp2p(&sbi->gogeta_meta, rht_entry);
+    if (fio->duplicated) {
+        incr_fp2p(&sbi->gogeta_meta, rht_entry);
+        atomic64_fetch_add_unless(&rht_entry->refcount, 1, 0);
+        fio->last_accessed = rht_entry;
+    } else {
+        __gogeta_alloc_and_write(dn, fio);
+        fio->last_accessed = NULL;
+    }
 
     rcu_read_unlock();
     return 0;

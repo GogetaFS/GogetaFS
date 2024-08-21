@@ -36,40 +36,6 @@ struct fp_entry {
 _Static_assert(sizeof(struct gogeta_fp) == 8, "Fingerprint not 8B!");
 _Static_assert(sizeof(struct fp_entry) == 32, "Fingerprint entry not 4B!");
 
-struct sdesc {
-    struct shash_desc shash;
-    char ctx[];
-};
-
-static inline struct sdesc *init_sdesc(struct crypto_shash *alg)
-{
-    struct sdesc *sdesc;
-    int size;
-
-    size = sizeof(struct shash_desc) + crypto_shash_descsize(alg);
-    sdesc = kmalloc(size, GFP_ATOMIC);
-    if (!sdesc)
-        return ERR_PTR(-ENOMEM);
-    sdesc->shash.tfm = alg;
-    return sdesc;
-}
-
-static inline int calc_hash(struct crypto_shash *alg, const unsigned char *data,
-                            unsigned int datalen, unsigned char *digest)
-{
-    struct sdesc *sdesc;
-    int ret;
-
-    sdesc = init_sdesc(alg);
-    if (IS_ERR(sdesc)) {
-        pr_info("can't alloc sdesc\n");
-        return PTR_ERR(sdesc);
-    }
-    ret = crypto_shash_digest(&sdesc->shash, data, datalen, digest);
-    kfree(sdesc);
-    return ret;
-}
-
 static inline unsigned long get_index(char *digest) {
     unsigned long res = 0;
     unsigned long mask = (unsigned long)(1 << 15) - (unsigned long)1;
@@ -79,24 +45,10 @@ static inline unsigned long get_index(char *digest) {
 
 static inline int gogeta_fp_calc(const void *addr, struct gogeta_fp *fp, unsigned long *f_ofs)
 {
-    struct crypto_shash *alg;
-    char *hash_alg_name = "sha256";
-    unsigned char digest[SHA256_DIGEST_SIZE];
-    int ret;
-
-    alg = crypto_alloc_shash(hash_alg_name, 0, 0);
-    if (IS_ERR(alg)) {
-        pr_info("can't alloc alg %s\n", hash_alg_name);
-        return PTR_ERR(alg);
-    }
-    ret = calc_hash(alg, addr, 4096, digest);
-    crypto_free_shash(alg);
-
-    memcpy(&fp->value, digest, sizeof(fp->value));
-
+    fp->value = wyhash((const char *)addr, 4096, 0, _wyp);
 	// 32B per fingerprint
 	if (f_ofs)
-		*f_ofs = get_index(digest) << 5;
+		*f_ofs = get_index(((char *)&fp->value)) << 5;
 
     return 0;
 }

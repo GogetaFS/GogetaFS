@@ -228,9 +228,6 @@ static void __gogeta_alloc_and_write(struct dnode_of_data *dn, struct f2fs_io_in
 
     set_summary(&sum, dn->nid, dn->ofs_in_node, fio->version);
     do_write_page(&sum, fio);
-
-    // do not drop page too early
-    sb_breadahead(fio->sbi->sb, fio->new_blkaddr);
 }
 
 static int new_fp2p(struct gogeta_meta *meta, struct gogeta_rht_entry *rht_entry)
@@ -339,6 +336,25 @@ fail1:
 fail0:
     return ret;
 }
+
+// static u64 crc64_be(u64 crc, const void *p, size_t len) {
+//     size_t i, t;
+
+//     const unsigned char *_p = p;
+
+//     for (i = 0; i < len; i++) {
+//         t = ((crc >> 56) ^ (*_p++)) & 0xFF;
+//         crc = crc64table[t] ^ (crc << 8);
+//     }
+//     return crc;
+// }
+
+// u64 calc_crc64_hash(const unsigned char *data, unsigned int datalen) {
+//     uint64_t crc = 0xffffffffffffffffULL;
+//     crc = crc64_be(crc, data, datalen);
+//     crc ^= 0xffffffffffffffffULL;
+//     return crc;
+// }
 
 int gogeta_dedup_one_page(struct dnode_of_data *dn, struct f2fs_io_info *fio)
 {

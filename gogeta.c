@@ -1,6 +1,7 @@
 /*
  * Deduplication metadata table.
  *
+ * Copyright (c) 2024-2025 Yanqi Pan <wadepan.cs@foxmail.com>
  * Copyright (c) 2020-2023 Jiansheng Qiu <jianshengqiu.cs@gmail.com>
  *
  * This file is licensed under the terms of the GNU General Public
